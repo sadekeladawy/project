@@ -1,0 +1,6 @@
+{
+  "name": "Island",
+  "description": "Dynamic Island Android app in Kotlin, Jetpack Compose & Material 3 with live interactive simulator and full Android Studio project.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

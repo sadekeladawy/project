@@ -1,0 +1,3 @@
+-keep class com.island.app.** { *; }
+-keep class androidx.datastore.** { *; }
+-dontwarn kotlinx.coroutines.**

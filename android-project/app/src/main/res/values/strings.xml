@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Island</string>
+    <string name="notification_listener_label">Island Media Listener</string>
+    <string name="accessibility_service_label">Island App Exit Detector</string>
+    <string name="accessibility_service_description">Detects when your active music app moves to the background or foreground so Island can play the Dynamic Island morph animation. Island never reads screen text or keystrokes.</string>
+    <string name="service_channel_name">Island Overlay Service</string>
+    <string name="service_channel_description">Keeps the floating Dynamic Island capsule active above other apps.</string>
+    <string name="service_notification_title">Island is active</string>
+    <string name="service_notification_text">Floating overlay running smoothly at the top of your screen.</string>
+</resources>
