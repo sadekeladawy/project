@@ -347,6 +347,19 @@ export function finishAppTransition(state: IslandState, transitionId: string): I
   };
 }
 
+export function getIslandVerticalOffset(
+  mode: IslandDisplayMode,
+  activeEvent: IslandEvent | null,
+  settings: IslandSettings,
+  statusBarClearance = 42
+): number {
+  const resolvedMode: IslandDisplayMode = activeEvent ? mode : 'IDLE';
+  if (resolvedMode === 'EXPANDED' || resolvedMode === 'FULL_EXPANDED') {
+    return Math.max(settings.offsetY, statusBarClearance);
+  }
+  return settings.offsetY;
+}
+
 export function getIslandDimensions(
   mode: IslandDisplayMode,
   activeEvent: IslandEvent | null,
@@ -361,33 +374,37 @@ export function getIslandDimensions(
     };
   }
   if (resolvedMode === 'COMPACT') {
-    let width = 224;
-    if (activeEvent?.type === 'MUSIC_PLAYER') width = 236;
-    if (activeEvent?.type === 'INCOMING_CALL') width = 252;
-    if (activeEvent?.type === 'BLUETOOTH') width = 246;
-    if (activeEvent?.type === 'WIFI_CONNECTED') width = 240;
+    // Restrict compact width proportionally (<= 212px) so left/right status bar notifications remain clear
+    const maxCompactW = 212;
+    let desiredW = Math.max(settings.idleWidth + 68, 198);
+    if (activeEvent?.type === 'MUSIC_PLAYER') desiredW = Math.max(settings.idleWidth + 64, 194);
+    if (activeEvent?.type === 'INCOMING_CALL') desiredW = Math.max(settings.idleWidth + 76, 210);
+    if (activeEvent?.type === 'BLUETOOTH') desiredW = Math.max(settings.idleWidth + 74, 208);
+    if (activeEvent?.type === 'WIFI_CONNECTED') desiredW = Math.max(settings.idleWidth + 72, 204);
     return {
-      width,
-      height: Math.max(settings.idleHeight, 40),
-      radius: 24,
+      width: Math.min(maxCompactW, desiredW),
+      height: Math.min(38, Math.max(settings.idleHeight, 34)),
+      radius: 20,
     };
   }
   if (resolvedMode === 'EXPANDED') {
-    let height = 88;
-    if (activeEvent?.type === 'INCOMING_CALL') height = 112;
-    if (activeEvent?.type === 'MUSIC_PLAYER') height = 168;
+    let height = 74;
+    if (activeEvent?.type === 'INCOMING_CALL') height = 94;
+    if (activeEvent?.type === 'MUSIC_PLAYER') height = 152;
+    const width = Math.min(308, Math.max(276, Math.round(settings.idleWidth * 2.2)));
     return {
-      width: 332,
+      width,
       height,
-      radius: 28,
+      radius: 26,
     };
   }
-  let height = 132;
-  if (activeEvent?.type === 'INCOMING_CALL') height = 144;
-  if (activeEvent?.type === 'MUSIC_PLAYER') height = 216;
+  let height = 98;
+  if (activeEvent?.type === 'INCOMING_CALL') height = 116;
+  if (activeEvent?.type === 'MUSIC_PLAYER') height = 176;
+  const width = Math.min(322, Math.max(292, Math.round(settings.idleWidth * 2.35)));
   return {
-    width: 344,
+    width,
     height,
-    radius: 32,
+    radius: 30,
   };
 }

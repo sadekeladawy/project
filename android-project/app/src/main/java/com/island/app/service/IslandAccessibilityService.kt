@@ -45,12 +45,17 @@ object AppForegroundTracker {
     private val _isAccessibilityConnected = MutableStateFlow(false)
     val isAccessibilityConnected: StateFlow<Boolean> = _isAccessibilityConnected.asStateFlow()
 
+    private val _activeService = MutableStateFlow<IslandAccessibilityService?>(null)
+    val activeService: StateFlow<IslandAccessibilityService?> = _activeService.asStateFlow()
+
     private val _transitions = MutableSharedFlow<AppTransitionEvent>(extraBufferCapacity = 4)
     val transitions: SharedFlow<AppTransitionEvent> = _transitions.asSharedFlow()
 
     private var lastTransitionAtMs: Long = 0L
 
-    internal fun setAccessibilityConnected(connected: Boolean) {
+    internal fun setActiveService(service: IslandAccessibilityService?) {
+        _activeService.value = service
+        val connected = service != null
         _isAccessibilityConnected.value = connected
         Log.d(TAG, "AccessibilityService connected=$connected")
     }
@@ -145,7 +150,7 @@ class IslandAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        AppForegroundTracker.setAccessibilityConnected(true)
+        AppForegroundTracker.setActiveService(this)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -162,7 +167,7 @@ class IslandAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
-        AppForegroundTracker.setAccessibilityConnected(false)
+        AppForegroundTracker.setActiveService(null)
     }
 }
 

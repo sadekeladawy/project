@@ -9,6 +9,7 @@ import {
   Bluetooth,
   BluetoothOff,
   CheckCircle2,
+  ChevronUp,
   Headphones,
   Pause,
   Phone,
@@ -23,7 +24,7 @@ import {
   WifiZero,
   Zap,
 } from 'lucide-react';
-import { getIslandDimensions } from '../island/islandReducer';
+import { getIslandDimensions, getIslandVerticalOffset } from '../island/islandReducer';
 import { IslandDisplayMode, IslandEvent, IslandSettings } from '../island/types';
 
 interface DynamicIslandCapsuleProps {
@@ -135,28 +136,44 @@ export const DynamicIslandCapsule: React.FC<DynamicIslandCapsuleProps> = ({
   scaleFactor = 1,
 }) => {
   const dims = getIslandDimensions(displayMode, activeEvent, settings);
+  const verticalOffset = getIslandVerticalOffset(displayMode, activeEvent, settings);
+  const isExpanded =
+    activeEvent !== null && (displayMode === 'EXPANDED' || displayMode === 'FULL_EXPANDED');
+  const isInteractiveExpanded =
+    isExpanded &&
+    (activeEvent?.type === 'MUSIC_PLAYER' || activeEvent?.type === 'INCOMING_CALL');
+
   const longPressTimer = useRef<number | null>(null);
   const longPressTriggered = useRef(false);
+  const dragStartX = useRef<number | null>(null);
   const dragStartY = useRef<number | null>(null);
 
   const handlePointerDown = (e: React.PointerEvent) => {
+    dragStartX.current = e.clientX;
     dragStartY.current = e.clientY;
     longPressTriggered.current = false;
-    longPressTimer.current = window.setTimeout(() => {
-      longPressTriggered.current = true;
-      onLongPress();
-    }, 420);
+    if (!isInteractiveExpanded) {
+      longPressTimer.current = window.setTimeout(() => {
+        longPressTriggered.current = true;
+        onLongPress();
+      }, 420);
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (dragStartY.current !== null && e.clientY - dragStartY.current < -22) {
-      if (longPressTimer.current) {
-        clearTimeout(longPressTimer.current);
-        longPressTimer.current = null;
-      }
-      if (displayMode !== 'IDLE') {
-        dragStartY.current = null;
-        onSwipeUp();
+    if (dragStartY.current !== null && dragStartX.current !== null) {
+      const dy = e.clientY - dragStartY.current;
+      const dx = e.clientX - dragStartX.current;
+      if (dy < -34 && Math.abs(dy) > Math.abs(dx) * 1.5) {
+        if (longPressTimer.current) {
+          clearTimeout(longPressTimer.current);
+          longPressTimer.current = null;
+        }
+        if (displayMode !== 'IDLE') {
+          dragStartX.current = null;
+          dragStartY.current = null;
+          onSwipeUp();
+        }
       }
     }
   };
@@ -166,9 +183,10 @@ export const DynamicIslandCapsule: React.FC<DynamicIslandCapsuleProps> = ({
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
-    if (!longPressTriggered.current) {
+    if (!longPressTriggered.current && !isInteractiveExpanded) {
       onTap();
     }
+    dragStartX.current = null;
     dragStartY.current = null;
   };
 
@@ -177,6 +195,7 @@ export const DynamicIslandCapsule: React.FC<DynamicIslandCapsuleProps> = ({
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
+    dragStartX.current = null;
     dragStartY.current = null;
   };
 
@@ -185,7 +204,7 @@ export const DynamicIslandCapsule: React.FC<DynamicIslandCapsuleProps> = ({
     : 'IDLE';
 
   return (
-    <div className="flex items-center justify-center gap-2">
+    <div className="relative z-50 flex items-center justify-center gap-2">
       <motion.div
         data-testid="dynamic-island-capsule"
         data-mode={activeEvent ? displayMode : 'IDLE'}
@@ -215,21 +234,23 @@ export const DynamicIslandCapsule: React.FC<DynamicIslandCapsuleProps> = ({
           height: dims.height * scaleFactor,
           borderRadius: dims.radius * scaleFactor,
           x: settings.offsetX * scaleFactor,
-          y: settings.offsetY * scaleFactor,
+          y: verticalOffset * scaleFactor,
           opacity: isHidden ? 0 : 1,
           scale: isHidden ? 0.8 : 1,
         }}
         transition={SPRING_TRANSITION}
-        className="relative bg-black text-white border border-white/15 shadow-[0_14px_38px_rgba(0,0,0,0.65)] overflow-hidden select-none cursor-pointer flex items-center justify-center focus-visible:outline-2 focus-visible:outline-[#3B82F6]"
+        className={`relative z-50 bg-black text-white border border-white/15 shadow-[0_14px_38px_rgba(0,0,0,0.65)] overflow-hidden select-none flex items-center justify-center focus-visible:outline-2 focus-visible:outline-[#3B82F6] ${
+          isInteractiveExpanded ? 'cursor-default' : 'cursor-pointer'
+        }`}
         style={{ pointerEvents: isHidden ? 'none' : 'auto' }}
       >
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.div
             key={contentKey}
-            initial={{ opacity: 0, scale: 0.9, filter: 'blur(6px)' }}
-            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-            exit={{ opacity: 0, scale: 0.92, filter: 'blur(4px)' }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
             className="w-full h-full flex items-center justify-center"
           >
             {!activeEvent || displayMode === 'IDLE' ? (
@@ -240,6 +261,7 @@ export const DynamicIslandCapsule: React.FC<DynamicIslandCapsuleProps> = ({
               <IslandCardBody
                 event={activeEvent}
                 mode={displayMode}
+                onCollapse={onSwipeUp}
                 onMediaAction={onMediaAction}
                 onMediaSeek={onMediaSeek}
                 onCallAction={onCallAction}
@@ -252,16 +274,16 @@ export const DynamicIslandCapsule: React.FC<DynamicIslandCapsuleProps> = ({
       <AnimatePresence>
         {queueCount > 0 && activeEvent && displayMode === 'COMPACT' && !isHidden && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.6, y: settings.offsetY * scaleFactor }}
+            initial={{ opacity: 0, scale: 0.6, y: verticalOffset * scaleFactor }}
             animate={{
               opacity: 1,
               scale: 1,
               x: settings.offsetX * scaleFactor,
-              y: settings.offsetY * scaleFactor,
+              y: verticalOffset * scaleFactor,
             }}
             exit={{ opacity: 0, scale: 0.6 }}
             transition={SPRING_TRANSITION}
-            className="h-9 min-w-9 px-2 rounded-full bg-black text-zinc-200 border border-white/15 shadow-[0_10px_28px_rgba(0,0,0,0.6)] flex items-center justify-center text-[11px] font-mono font-semibold tabular-nums"
+            className="h-8 min-w-8 px-1.5 rounded-full bg-black text-zinc-200 border border-white/15 shadow-[0_10px_28px_rgba(0,0,0,0.6)] flex items-center justify-center text-[11px] font-mono font-semibold tabular-nums"
           >
             +{queueCount}
           </motion.div>
@@ -274,12 +296,14 @@ export const DynamicIslandCapsule: React.FC<DynamicIslandCapsuleProps> = ({
 function IslandCardBody({
   event,
   mode,
+  onCollapse,
   onMediaAction,
   onMediaSeek,
   onCallAction,
 }: {
   event: IslandEvent;
   mode: IslandDisplayMode;
+  onCollapse: () => void;
   onMediaAction: (action: 'PLAY_PAUSE' | 'NEXT' | 'PREV') => void;
   onMediaSeek?: (positionSec: number) => void;
   onCallAction: (action: 'ACCEPT' | 'DECLINE') => void;
@@ -582,24 +606,24 @@ function IslandCardBody({
 
     case 'INCOMING_CALL':
       return isCompact ? (
-        <div className="w-full px-3.5 flex items-center justify-between text-xs gap-2">
-          <div className="flex items-center gap-2 min-w-0">
+        <div className="w-full px-3 flex items-center justify-between text-[11px] gap-1.5">
+          <div className="flex items-center gap-1.5 min-w-0">
             <motion.span {...ICON_POP}>
-              <Phone className="w-4 h-4 text-[#30D158] shrink-0" />
+              <Phone className="w-3.5 h-3.5 text-[#30D158] shrink-0" />
             </motion.span>
             <span className="font-semibold text-white truncate">{event.callerName}</span>
           </div>
-          <span className="text-[11px] font-medium text-[#30D158] shrink-0">Incoming</span>
+          <span className="text-[10px] font-medium text-[#30D158] shrink-0">Call</span>
         </div>
       ) : (
-        <div className="w-full px-4 py-3 flex items-center justify-between gap-3">
+        <div className="w-full px-4 py-2.5 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold text-[#30D158]">Incoming Call</p>
-            <p className="text-base font-bold text-white truncate">{event.callerName}</p>
+            <p className="text-sm font-bold text-white truncate">{event.callerName}</p>
             {isFull && <p className="text-xs text-zinc-400 tabular-nums">{event.phoneNumber}</p>}
           </div>
           <div
-            className="flex items-center gap-2.5 shrink-0"
+            className="flex items-center gap-2 shrink-0"
             onPointerDown={(e) => e.stopPropagation()}
             onPointerUp={(e) => e.stopPropagation()}
           >
@@ -610,7 +634,7 @@ function IslandCardBody({
                 e.stopPropagation();
                 onCallAction('DECLINE');
               }}
-              className="w-10 h-10 rounded-full bg-[#FF453A] hover:bg-[#ff5a50] flex items-center justify-center transition-colors"
+              className="w-9 h-9 rounded-full bg-[#FF453A] hover:bg-[#ff5a50] active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
             >
               <PhoneOff className="w-4 h-4 text-white" />
             </button>
@@ -621,7 +645,7 @@ function IslandCardBody({
                 e.stopPropagation();
                 onCallAction('ACCEPT');
               }}
-              className="w-10 h-10 rounded-full bg-[#30D158] hover:bg-[#41df67] flex items-center justify-center transition-colors"
+              className="w-9 h-9 rounded-full bg-[#30D158] hover:bg-[#41df67] active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
             >
               <Phone className="w-4 h-4 text-white" />
             </button>
@@ -636,30 +660,44 @@ function IslandCardBody({
             src="/src/assets/images/album_cover_midnight_1795029689726.jpg"
             alt={event.track.title}
             referrerPolicy="no-referrer"
-            className="w-6 h-6 rounded-md object-cover shrink-0 border border-white/10"
+            className="w-5 h-5 rounded-md object-cover shrink-0 border border-white/10"
           />
-          <span className="text-xs font-medium text-white truncate flex-1">{event.track.title}</span>
+          <span className="text-[11px] font-medium text-white truncate flex-1">{event.track.title}</span>
           <EqualizerBars playing={event.track.isPlaying} />
         </div>
       ) : (
-        <div className="w-full h-full px-4 py-3 flex flex-col justify-between">
-          <div className="flex items-center gap-3">
+        <div className="w-full h-full px-3.5 py-2.5 flex flex-col justify-between">
+          <div className="flex items-center gap-2.5">
             <img
               src="/src/assets/images/album_cover_midnight_1795029689726.jpg"
               alt={event.track.title}
               referrerPolicy="no-referrer"
-              className={`${isFull ? 'w-12 h-12' : 'w-10 h-10'} rounded-xl object-cover shrink-0 border border-white/10`}
+              className={`${isFull ? 'w-11 h-11' : 'w-9 h-9'} rounded-lg object-cover shrink-0 border border-white/10`}
             />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-white truncate">{event.track.title}</p>
-              <p className="text-xs text-zinc-400 truncate">{event.track.artist}</p>
+              <p className="text-[13px] font-semibold text-white truncate leading-tight">{event.track.title}</p>
+              <p className="text-[11px] text-zinc-400 truncate mt-0.5">{event.track.artist}</p>
             </div>
             <EqualizerBars playing={event.track.isPlaying} />
+            <button
+              type="button"
+              aria-label="Collapse music player"
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCollapse();
+              }}
+              className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 flex items-center justify-center transition-transform cursor-pointer shrink-0"
+            >
+              <ChevronUp className="w-3.5 h-3.5 text-zinc-300" />
+            </button>
           </div>
 
           <div
-            className="space-y-1"
+            className="space-y-0.5"
             onPointerDown={(e) => e.stopPropagation()}
+            onPointerMove={(e) => e.stopPropagation()}
             onPointerUp={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
@@ -679,7 +717,7 @@ function IslandCardBody({
           </div>
 
           <div
-            className="flex items-center justify-center gap-6"
+            className="flex items-center justify-center gap-5"
             onPointerDown={(e) => e.stopPropagation()}
             onPointerUp={(e) => e.stopPropagation()}
           >
@@ -690,9 +728,9 @@ function IslandCardBody({
                 e.stopPropagation();
                 onMediaAction('PREV');
               }}
-              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
             >
-              <SkipBack className="w-4 h-4 text-white fill-white" />
+              <SkipBack className="w-3.5 h-3.5 text-white fill-white" />
             </button>
             <button
               type="button"
@@ -701,7 +739,7 @@ function IslandCardBody({
                 e.stopPropagation();
                 onMediaAction('PLAY_PAUSE');
               }}
-              className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
+              className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
             >
               {event.track.isPlaying ? (
                 <Pause className="w-4 h-4 text-white fill-white" />
@@ -716,9 +754,9 @@ function IslandCardBody({
                 e.stopPropagation();
                 onMediaAction('NEXT');
               }}
-              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 flex items-center justify-center transition-transform cursor-pointer"
             >
-              <SkipForward className="w-4 h-4 text-white fill-white" />
+              <SkipForward className="w-3.5 h-3.5 text-white fill-white" />
             </button>
           </div>
         </div>

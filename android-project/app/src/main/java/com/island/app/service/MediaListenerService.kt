@@ -238,6 +238,29 @@ class MediaListenerService : NotificationListenerService() {
                     val isCurrentlyPlaying = stateCode == PlaybackState.STATE_PLAYING ||
                         stateCode == PlaybackState.STATE_BUFFERING
                     if (isCurrentlyPlaying) controls.pause() else controls.play()
+
+                    // Optimistically flip playback state immediately so the Play/Pause icon
+                    // and equalizer respond on the next frame (<16ms) instead of waiting for IPC.
+                    val current = _mediaState.value
+                    if (current != null) {
+                        val nowElapsed = SystemClock.elapsedRealtime()
+                        val elapsedDelta = if (current.isPlaying && current.lastPositionUpdateTimeMs > 0L) {
+                            ((nowElapsed - current.lastPositionUpdateTimeMs).coerceAtLeast(0L) *
+                                current.playbackSpeed.coerceAtLeast(0.5f)).toLong()
+                        } else {
+                            0L
+                        }
+                        val nextPos = (current.positionMs + elapsedDelta)
+                            .coerceIn(0L, current.durationMs.coerceAtLeast(1L))
+                        val updated = current.copy(
+                            isPlaying = !isCurrentlyPlaying,
+                            positionMs = nextPos,
+                            lastPositionUpdateTimeMs = nowElapsed,
+                            timestampMs = System.currentTimeMillis()
+                        )
+                        lastPublishedFingerprint = buildFingerprint(updated)
+                        _mediaState.value = updated
+                    }
                 }
                 MediaCommand.Next -> controls.skipToNext()
                 MediaCommand.Previous -> controls.skipToPrevious()

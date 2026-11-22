@@ -51,11 +51,12 @@ import com.island.app.data.IslandSettings
 import com.island.app.model.AppTransitionEvent
 import com.island.app.model.IslandDisplayMode
 import com.island.app.model.IslandEvent
+import com.island.app.model.IslandEventType
 import com.island.app.state.IslandStateManager
 import com.island.app.state.IslandUiState
 import com.island.app.ui.overlay.AppExitTransitionOverlay
 import com.island.app.ui.overlay.DynamicIslandOverlay
-import com.island.app.ui.overlay.computeCameraTopInsetDp
+import com.island.app.ui.overlay.computeExpandedTopShiftDp
 import com.island.app.ui.overlay.computeTargetIslandSizeDp
 import com.island.app.ui.theme.IslandTheme
 import kotlinx.coroutines.CoroutineScope
@@ -68,6 +69,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.math.max
@@ -76,6 +78,23 @@ import kotlin.math.roundToInt
 private data class CutoutMetrics(
     val widthDp: Float = 36f,
     val bottomDp: Float = 34f
+)
+
+/**
+ * Minimal geometry-only key used to deduplicate WindowManager.updateViewLayout() calls.
+ * Media playback toggles, track updates, and seekbar scrubbing do not change any field here,
+ * eliminating window relayout jitter and touch latency while interacting with controls.
+ */
+private data class WindowGeometryKey(
+    val displayMode: IslandDisplayMode,
+    val eventType: IslandEventType?,
+    val offsetX: Float,
+    val offsetY: Float,
+    val idleWidthDp: Float,
+    val idleHeightDp: Float,
+    val cutoutWidthDp: Float,
+    val cutoutBottomDp: Float,
+    val isLiveAdjusting: Boolean
 )
 
 class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner, ViewModelStoreOwner {
@@ -89,12 +108,15 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private var windowManager: WindowManager? = null
+    private var serviceWindowManager: WindowManager? = null
+    private var overlayWindowManager: WindowManager? = null
+    private var overlayWindowType: Int = appOverlayWindowType()
     private var stateManager: IslandStateManager? = null
     private var systemMonitor: SystemEventMonitor? = null
     private var usageFallback: ForegroundAppUsageFallback? = null
 
     private var overlayContainer: FrameLayout? = null
+    private var overlayComposeView: ComposeView? = null
     private var transitionContainer: FrameLayout? = null
     private var fullscreenProbeView: View? = null
     private var overlayParams: WindowManager.LayoutParams? = null
@@ -124,7 +146,7 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
             stopSelf()
             return
         }
-        windowManager = wm
+        serviceWindowManager = wm
 
         val settingsRepo = (application as IslandApplication).settingsRepository
         val manager = IslandStateManager(
@@ -151,7 +173,8 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
 
-        val attached = runCatching { attachOverlayViews(wm, manager) }
+        attachFullscreenProbe(wm, manager)
+        val attached = runCatching { attachIslandWindow(wm, manager) }
             .onFailure { CrashLogger.recordNonFatal(this, "Failed to attach Dynamic Island overlay", it) }
             .isSuccess
 
@@ -163,6 +186,19 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
 
         runCatching { monitor.start() }
             .onFailure { CrashLogger.recordNonFatal(this, "SystemEventMonitor start error", it) }
+
+        // Automatically upgrade/downgrade z-order layer when AccessibilityService connects or disconnects
+        serviceScope.launch {
+            AppForegroundTracker.activeService
+                .drop(1)
+                .distinctUntilChanged()
+                .collect {
+                    runCatching { attachIslandWindow(wm, manager) }
+                        .onFailure { err ->
+                            CrashLogger.recordNonFatal(this@IslandOverlayService, "Overlay layer re-attach error", err)
+                        }
+                }
+        }
 
         // Merge persisted DataStore settings with zero-I/O live slider preview overrides
         // so moving any position/size slider updates the real overlay at 60/120fps immediately.
@@ -183,27 +219,35 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
                         fallback.stop()
                     }
                 }
-                updateOverlayWindowBounds(
-                    uiState = manager.uiState.value,
-                    settings = effectiveSettings,
-                    cutout = cutoutMetricsState.value,
-                    immediateShrink = isLiveAdjusting
-                )
             }
         }
 
+        // Deduplicated WindowManager geometry sync: only invokes updateViewLayout() when
+        // window bounds or position actually change (zero relayouts on media button clicks).
         serviceScope.launch {
             combine(
                 manager.uiState,
-                cutoutMetricsState
-            ) { uiState, cutout ->
-                Pair(uiState, cutout)
-            }.collect { (uiState, cutout) ->
+                settingsState,
+                cutoutMetricsState,
+                isLiveAdjustingState
+            ) { uiState, settings, cutout, isLiveAdjusting ->
+                WindowGeometryKey(
+                    displayMode = if (uiState.activeEvent == null) IslandDisplayMode.IDLE else uiState.displayMode,
+                    eventType = uiState.activeEvent?.type,
+                    offsetX = settings.offsetX,
+                    offsetY = settings.offsetY,
+                    idleWidthDp = settings.idleWidthDp,
+                    idleHeightDp = settings.idleHeightDp,
+                    cutoutWidthDp = cutout.widthDp,
+                    cutoutBottomDp = cutout.bottomDp,
+                    isLiveAdjusting = isLiveAdjusting
+                )
+            }.distinctUntilChanged().collect { key ->
                 updateOverlayWindowBounds(
-                    uiState = uiState,
+                    uiState = manager.uiState.value,
                     settings = settingsState.value,
-                    cutout = cutout,
-                    immediateShrink = false
+                    cutout = cutoutMetricsState.value,
+                    immediateShrink = key.isLiveAdjusting
                 )
             }
         }
@@ -264,26 +308,88 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
 
     override fun onDestroy() {
         super.onDestroy()
+        shrinkWindowJob?.cancel()
         runCatching { systemMonitor?.stop() }
         runCatching { usageFallback?.stop() }
         removeTransitionOverlay()
-        val wm = windowManager
-        overlayContainer?.let { container ->
-            if (container.isAttachedToWindow) {
-                runCatching { wm?.removeViewImmediate(container) }
-            }
-        }
+        detachIslandWindow()
         fullscreenProbeView?.let { probe ->
             if (probe.isAttachedToWindow) {
-                runCatching { wm?.removeViewImmediate(probe) }
+                runCatching { serviceWindowManager?.removeViewImmediate(probe) }
             }
         }
-        overlayContainer = null
         fullscreenProbeView = null
 
         transitionLifecycleToDestroyed()
         viewModelStore.clear()
         serviceScope.cancel()
+    }
+
+    private fun appOverlayWindowType(): Int {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
+    }
+
+    /**
+     * Prefers TYPE_ACCESSIBILITY_OVERLAY when IslandAccessibilityService is active so the
+     * Dynamic Island always renders in the topmost SurfaceFlinger layer above status bar UI,
+     * heads-up notifications, and TYPE_APPLICATION_OVERLAY windows. Falls back cleanly to
+     * TYPE_APPLICATION_OVERLAY when Accessibility is disabled.
+     */
+    private fun resolveOverlayTarget(fallbackWm: WindowManager): Pair<WindowManager, Int> {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            val accService = AppForegroundTracker.activeService.value
+            if (accService != null) {
+                val accWm = runCatching {
+                    accService.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+                }.getOrNull()
+                if (accWm != null) {
+                    return Pair(accWm, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY)
+                }
+            }
+        }
+        return Pair(fallbackWm, appOverlayWindowType())
+    }
+
+    private fun detachIslandWindow() {
+        val prevWm = overlayWindowManager ?: serviceWindowManager
+        overlayContainer?.let { container ->
+            if (container.isAttachedToWindow) {
+                runCatching { prevWm?.removeViewImmediate(container) }
+            }
+        }
+        runCatching { overlayComposeView?.disposeComposition() }
+        overlayComposeView = null
+        overlayContainer = null
+        overlayParams = null
+        overlayWindowManager = null
+    }
+
+    /**
+     * Guarantees the Dynamic Island capsule remains strictly on top when both the capsule
+     * and the temporary app-exit overlay share TYPE_APPLICATION_OVERLAY (Accessibility off).
+     * Because ComposeView uses DisposeOnLifecycleDestroyed, re-adding preserves active springs.
+     */
+    private fun bringIslandWindowToTop() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1 &&
+            overlayWindowType == WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
+        ) {
+            // Already in a strictly higher SurfaceFlinger window layer than TYPE_APPLICATION_OVERLAY
+            return
+        }
+        val wm = overlayWindowManager ?: return
+        val container = overlayContainer ?: return
+        val params = overlayParams ?: return
+        if (!container.isAttachedToWindow) return
+        runCatching {
+            wm.removeViewImmediate(container)
+            wm.addView(container, params)
+            container.bringToFront()
+        }
     }
 
     private fun showTransitionOverlay(
@@ -292,12 +398,7 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         transition: AppTransitionEvent
     ) {
         removeTransitionOverlay()
-        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        } else {
-            @Suppress("DEPRECATION")
-            WindowManager.LayoutParams.TYPE_PHONE
-        }
+        val type = appOverlayWindowType()
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -362,6 +463,8 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         runCatching {
             wm.addView(container, params)
             transitionContainer = container
+            // Keep the Dynamic Island strictly above the transition overlay at all times
+            bringIslandWindowToTop()
         }.onFailure {
             CrashLogger.recordNonFatal(this, "Failed to attach AppExitTransitionOverlay", it)
             manager.onAppTransitionFinished(transition.id)
@@ -369,7 +472,7 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     }
 
     private fun removeTransitionOverlay() {
-        val wm = windowManager ?: return
+        val wm = serviceWindowManager ?: return
         transitionContainer?.let { container ->
             if (container.isAttachedToWindow) {
                 runCatching { wm.removeViewImmediate(container) }
@@ -445,15 +548,8 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         }
     }
 
-    private fun attachOverlayViews(wm: WindowManager, manager: IslandStateManager) {
-        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        } else {
-            @Suppress("DEPRECATION")
-            WindowManager.LayoutParams.TYPE_PHONE
-        }
-
-        // Transparent 1px fullscreen & display-cutout probe
+    private fun attachFullscreenProbe(wm: WindowManager, manager: IslandStateManager) {
+        val type = appOverlayWindowType()
         val probe = View(this).apply {
             setOnApplyWindowInsetsListener { _, insets ->
                 runCatching {
@@ -492,7 +588,6 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
                                 bottomDp = bottomDp
                             )
                         } else {
-                            // No display cutout reported; keep minimal status bar clearance only
                             val statusTopPx = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                                 insets.getInsetsIgnoringVisibility(WindowInsets.Type.statusBars()).top
                             } else {
@@ -532,7 +627,12 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
             fullscreenProbeView = probe
             ViewCompat.requestApplyInsets(probe)
         }
+    }
 
+    private fun attachIslandWindow(fallbackWm: WindowManager, manager: IslandStateManager) {
+        detachIslandWindow()
+
+        val (preferredWm, preferredType) = resolveOverlayTarget(fallbackWm)
         val initialSettings = settingsState.value
         val initialCutout = cutoutMetricsState.value
         val (initW, initH) = computeWindowPixelSize(
@@ -540,14 +640,19 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
             settings = initialSettings,
             cutout = initialCutout
         )
+        val isExpanded = manager.uiState.value.displayMode == IslandDisplayMode.EXPANDED ||
+            manager.uiState.value.displayMode == IslandDisplayMode.FULL_EXPANDED
+        val baseFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
+            if (isExpanded) WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH else 0
+
         val params = WindowManager.LayoutParams(
             initW,
             initH,
-            type,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            preferredType,
+            baseFlags,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -573,13 +678,17 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
                 return super.dispatchTouchEvent(event)
             }
         }.apply {
+            elevation = dpToPx(24f).toFloat()
+            ViewCompat.setTranslationZ(this, dpToPx(24f).toFloat())
             setViewTreeLifecycleOwner(this@IslandOverlayService)
             setViewTreeSavedStateRegistryOwner(this@IslandOverlayService)
             setViewTreeViewModelStoreOwner(this@IslandOverlayService)
         }
 
         val composeView = ComposeView(themedContext).apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
+            setViewCompositionStrategy(
+                ViewCompositionStrategy.DisposeOnLifecycleDestroyed(this@IslandOverlayService)
+            )
             setContent {
                 CompositionLocalProvider(LocalLifecycleOwner provides this@IslandOverlayService) {
                     val settings by settingsState.collectAsState()
@@ -637,9 +746,27 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
             )
         )
 
+        var activeWm = preferredWm
+        var activeType = preferredType
+        val addedPreferred = runCatching {
+            preferredWm.addView(container, params)
+        }.isSuccess
+
+        if (!addedPreferred && preferredType != appOverlayWindowType()) {
+            activeType = appOverlayWindowType()
+            activeWm = fallbackWm
+            params.type = activeType
+            fallbackWm.addView(container, params)
+        } else if (!addedPreferred) {
+            throw IllegalStateException("Unable to add Dynamic Island overlay window")
+        }
+
+        container.bringToFront()
+        overlayWindowManager = activeWm
+        overlayWindowType = activeType
         overlayParams = params
         overlayContainer = container
-        wm.addView(container, params)
+        overlayComposeView = composeView
     }
 
     private fun computeWindowPixelSize(
@@ -647,19 +774,27 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
         settings: IslandSettings,
         cutout: CutoutMetrics
     ): Pair<Int, Int> {
-        val cameraTopInsetDp = computeCameraTopInsetDp(settings.offsetY, cutout.bottomDp)
+        val screenWidthDp = pxToDp(resources.displayMetrics.widthPixels)
         val (targetW, targetH) = computeTargetIslandSizeDp(
             uiState = uiState,
             settings = settings,
-            cameraTopInsetDp = cameraTopInsetDp
+            screenWidthDp = screenWidthDp
         )
-        // Reserve spring-overshoot padding around the capsule so animations never clip
-        // and never force per-frame SurfaceFlinger buffer reallocations.
-        val overshootMarginW = if (uiState.displayMode == IslandDisplayMode.IDLE) 12f else 24f
-        val overshootMarginH = if (uiState.displayMode == IslandDisplayMode.IDLE) 12f else 28f
+        val isExpanded = uiState.activeEvent != null &&
+            (uiState.displayMode == IslandDisplayMode.EXPANDED ||
+                uiState.displayMode == IslandDisplayMode.FULL_EXPANDED)
+        // Reserve room for the GPU-interpolated downward slide below the camera & status bar
+        // so params.y never needs to jump mid-animation.
+        val expandedShiftDp = if (isExpanded) {
+            computeExpandedTopShiftDp(settings.offsetY, cutout.bottomDp)
+        } else {
+            0f
+        }
+        val overshootMarginW = if (uiState.displayMode == IslandDisplayMode.IDLE) 10f else 20f
+        val overshootMarginH = if (uiState.displayMode == IslandDisplayMode.IDLE) 10f else 24f
         val maxScreenW = (resources.displayMetrics.widthPixels - dpToPx(8f)).coerceAtLeast(dpToPx(280f))
         val pxW = dpToPx(targetW + overshootMarginW).coerceAtMost(maxScreenW)
-        val pxH = dpToPx(targetH + overshootMarginH)
+        val pxH = dpToPx(targetH + expandedShiftDp + overshootMarginH)
         return Pair(pxW, pxH)
     }
 
@@ -667,7 +802,7 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
      * Updates the overlay window position, outside-touch flag, and explicit pixel size.
      * When growing, the window expands immediately so the spring morph runs inside a fixed
      * GPU surface with zero per-frame relayoutWindow() calls. When shrinking, the window stays
-     * large until the spring settles (~480ms), then shrinks once so background touches pass through.
+     * large until the spring settles (~460ms), then shrinks once so background touches pass through.
      */
     private fun updateOverlayWindowBounds(
         uiState: IslandUiState,
@@ -677,11 +812,12 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
     ) {
         val view = overlayContainer ?: return
         val params = overlayParams ?: return
-        val wm = windowManager ?: return
+        val wm = overlayWindowManager ?: return
         if (!view.isAttachedToWindow) return
 
-        val isExpanded = uiState.displayMode == IslandDisplayMode.EXPANDED ||
-            uiState.displayMode == IslandDisplayMode.FULL_EXPANDED
+        val isExpanded = uiState.activeEvent != null &&
+            (uiState.displayMode == IslandDisplayMode.EXPANDED ||
+                uiState.displayMode == IslandDisplayMode.FULL_EXPANDED)
         val targetFlags = if (isExpanded) {
             params.flags or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
         } else {
@@ -722,11 +858,12 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
 
         if (!immediateShrink && needsShrink && !needsGrow) {
             val speed = settings.animationSpeed.coerceIn(0.5f, 2.0f)
-            val settleDelayMs = (480f / speed).toLong().coerceIn(260L, 900L)
+            val settleDelayMs = (460f / speed).toLong().coerceIn(260L, 880L)
             shrinkWindowJob = serviceScope.launch {
                 delay(settleDelayMs)
                 val currentView = overlayContainer ?: return@launch
                 val currentParams = overlayParams ?: return@launch
+                val currentWm = overlayWindowManager ?: return@launch
                 if (!currentView.isAttachedToWindow) return@launch
                 val (finalW, finalH) = computeWindowPixelSize(
                     uiState = stateManager?.uiState?.value ?: uiState,
@@ -736,7 +873,7 @@ class IslandOverlayService : Service(), LifecycleOwner, SavedStateRegistryOwner,
                 if (currentParams.width != finalW || currentParams.height != finalH) {
                     currentParams.width = finalW
                     currentParams.height = finalH
-                    runCatching { wm.updateViewLayout(currentView, currentParams) }
+                    runCatching { currentWm.updateViewLayout(currentView, currentParams) }
                 }
             }
         }

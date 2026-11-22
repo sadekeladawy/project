@@ -8,6 +8,7 @@ import {
   enqueueIslandEvent,
   finishAppTransition,
   getIslandDimensions,
+  getIslandVerticalOffset,
   longPressIsland,
   onExitAnimationReachedIsland,
   resetPositionAndSize,
@@ -319,4 +320,44 @@ test('queue replaces duplicate event types instead of stacking duplicates and fi
     allowAllSettings
   );
   assert.equal(allBtState.activeEvent?.type, 'BLUETOOTH');
+});
+
+test('proportional expansion bounds keep status bar and camera punch-hole unobstructed', () => {
+  const settings = createDefaultSettings();
+  const musicEvent = {
+    id: 'music_session',
+    type: 'MUSIC_PLAYER' as const,
+    track: { title: 'Midnight Refraction', artist: 'Kiasmos', isPlaying: true, positionSec: 42, durationSec: 214 },
+  };
+  const callEvent = {
+    id: 'call-1',
+    type: 'INCOMING_CALL' as const,
+    callerName: 'Elena Vance',
+    phoneNumber: '+1 415 555 0194',
+  };
+  const wifiEvent = {
+    id: 'wifi-1',
+    type: 'WIFI_CONNECTED' as const,
+    ssid: 'Studio-5G',
+  };
+
+  // Compact widths stay proportionally capped (<= 212) so left/right status bar notifications remain clear
+  for (const evt of [musicEvent, callEvent, wifiEvent]) {
+    const compact = getIslandDimensions('COMPACT', evt, settings);
+    assert.ok(compact.width <= 212, `compact width ${compact.width} should be <= 212`);
+    assert.ok(compact.height <= 38, `compact height ${compact.height} should be <= 38`);
+    assert.equal(getIslandVerticalOffset('COMPACT', evt, settings), settings.offsetY);
+  }
+
+  // Expanded & Full-Expanded stay proportionally bounded and glide below the status bar / punch-hole (>= 42)
+  const expMusic = getIslandDimensions('EXPANDED', musicEvent, settings);
+  assert.ok(expMusic.width <= 308 && expMusic.height <= 152);
+  assert.ok(getIslandVerticalOffset('EXPANDED', musicEvent, settings) >= 42);
+
+  const fullMusic = getIslandDimensions('FULL_EXPANDED', musicEvent, settings);
+  assert.ok(fullMusic.width <= 322 && fullMusic.height <= 176);
+  assert.ok(getIslandVerticalOffset('FULL_EXPANDED', musicEvent, settings) >= 42);
+
+  const expWifi = getIslandDimensions('EXPANDED', wifiEvent, settings);
+  assert.ok(expWifi.width <= 308 && expWifi.height <= 74);
 });

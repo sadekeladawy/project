@@ -69,6 +69,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
@@ -109,24 +110,23 @@ fun EventCardContent(
     event: IslandEvent,
     displayMode: IslandDisplayMode,
     cameraSafeGapDp: Dp = 0.dp,
-    cameraTopInsetDp: Dp = 0.dp,
     onCollapse: () -> Unit = {},
     onMediaCommand: (MediaCommand) -> Unit,
     onCallCommand: (CallCommand) -> Unit
 ) {
     when (event) {
-        is IslandEvent.ChargingStarted -> ChargingStartedCard(event, displayMode, cameraSafeGapDp, cameraTopInsetDp)
-        is IslandEvent.ChargingStopped -> ChargingStoppedCard(event, displayMode, cameraSafeGapDp, cameraTopInsetDp)
-        is IslandEvent.BatteryFull -> BatteryFullCard(event, displayMode, cameraSafeGapDp, cameraTopInsetDp)
-        is IslandEvent.LowBattery -> LowBatteryCard(event, displayMode, cameraSafeGapDp, cameraTopInsetDp)
-        is IslandEvent.WifiConnected -> WifiConnectedCard(event, displayMode, cameraSafeGapDp, cameraTopInsetDp)
-        is IslandEvent.WifiDisconnected -> WifiDisconnectedCard(displayMode, cameraSafeGapDp, cameraTopInsetDp)
-        is IslandEvent.HotspotChanged -> HotspotCard(event, displayMode, cameraSafeGapDp, cameraTopInsetDp)
-        is IslandEvent.BluetoothChanged -> BluetoothCard(event, displayMode, cameraSafeGapDp, cameraTopInsetDp)
-        is IslandEvent.AirplaneModeChanged -> AirplaneModeCard(event, displayMode, cameraSafeGapDp, cameraTopInsetDp)
-        is IslandEvent.RingerModeChanged -> RingerModeCard(event, displayMode, cameraSafeGapDp, cameraTopInsetDp)
-        is IslandEvent.IncomingCall -> IncomingCallCard(event, displayMode, cameraSafeGapDp, cameraTopInsetDp, onCallCommand)
-        is IslandEvent.MusicPlayback -> MusicPlayerCard(event, displayMode, cameraSafeGapDp, cameraTopInsetDp, onCollapse, onMediaCommand)
+        is IslandEvent.ChargingStarted -> ChargingStartedCard(event, displayMode, cameraSafeGapDp)
+        is IslandEvent.ChargingStopped -> ChargingStoppedCard(event, displayMode, cameraSafeGapDp)
+        is IslandEvent.BatteryFull -> BatteryFullCard(event, displayMode, cameraSafeGapDp)
+        is IslandEvent.LowBattery -> LowBatteryCard(event, displayMode, cameraSafeGapDp)
+        is IslandEvent.WifiConnected -> WifiConnectedCard(event, displayMode, cameraSafeGapDp)
+        is IslandEvent.WifiDisconnected -> WifiDisconnectedCard(displayMode, cameraSafeGapDp)
+        is IslandEvent.HotspotChanged -> HotspotCard(event, displayMode, cameraSafeGapDp)
+        is IslandEvent.BluetoothChanged -> BluetoothCard(event, displayMode, cameraSafeGapDp)
+        is IslandEvent.AirplaneModeChanged -> AirplaneModeCard(event, displayMode, cameraSafeGapDp)
+        is IslandEvent.RingerModeChanged -> RingerModeCard(event, displayMode, cameraSafeGapDp)
+        is IslandEvent.IncomingCall -> IncomingCallCard(event, displayMode, cameraSafeGapDp, onCallCommand)
+        is IslandEvent.MusicPlayback -> MusicPlayerCard(event, displayMode, cameraSafeGapDp, onCollapse, onMediaCommand)
         is IslandEvent.MusicSessionEnded -> Unit
     }
 }
@@ -144,7 +144,7 @@ private fun CompactSplitRow(
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
@@ -156,7 +156,7 @@ private fun CompactSplitRow(
         if (cameraSafeGapDp > 0.dp) {
             Spacer(Modifier.width(cameraSafeGapDp))
         } else {
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(6.dp))
         }
         Row(
             modifier = Modifier.weight(1f),
@@ -249,43 +249,41 @@ private fun BatteryRing(
 private fun ChargingStartedCard(
     event: IslandEvent.ChargingStarted,
     mode: IslandDisplayMode,
-    cameraSafeGapDp: Dp,
-    cameraTopInsetDp: Dp
+    cameraSafeGapDp: Dp
 ) {
     if (mode == IslandDisplayMode.COMPACT) {
         CompactSplitRow(
             cameraSafeGapDp = cameraSafeGapDp,
             leftContent = {
-                PopIcon(Icons.Rounded.Bolt, IslandGreen, "Charging", event.id, 18.dp)
+                PopIcon(Icons.Rounded.Bolt, IslandGreen, "Charging", event.id, 16.dp)
                 Spacer(Modifier.width(4.dp))
                 Text(
                     "Charging",
                     color = Color.White,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             },
             rightContent = {
-                Text("${event.batteryPercent}%", color = IslandGreen, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.width(6.dp))
-                BatteryRing(event.batteryPercent, IslandGreen, animatePulse = true, size = 18.dp)
+                Text("${event.batteryPercent}%", color = IslandGreen, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(5.dp))
+                BatteryRing(event.batteryPercent, IslandGreen, animatePulse = true, size = 16.dp)
             }
         )
     } else {
         StandardExpandedCard(
-            cameraTopInsetDp = cameraTopInsetDp,
             icon = {
                 Box(contentAlignment = Alignment.Center) {
-                    BatteryRing(event.batteryPercent, IslandGreen, animatePulse = true, size = 44.dp)
-                    PopIcon(Icons.Rounded.Bolt, IslandGreen, "Charging", event.id, 22.dp)
+                    BatteryRing(event.batteryPercent, IslandGreen, animatePulse = true, size = 38.dp)
+                    PopIcon(Icons.Rounded.Bolt, IslandGreen, "Charging", event.id, 19.dp)
                 }
             },
             title = "Charging Connected",
             subtitle = if (mode == IslandDisplayMode.FULL_EXPANDED) "Fast power delivery active" else "Power adapter attached",
             trailing = {
-                Text("${event.batteryPercent}%", color = IslandGreen, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("${event.batteryPercent}%", color = IslandGreen, fontSize = 19.sp, fontWeight = FontWeight.Bold)
             }
         )
     }
@@ -295,36 +293,34 @@ private fun ChargingStartedCard(
 private fun ChargingStoppedCard(
     event: IslandEvent.ChargingStopped,
     mode: IslandDisplayMode,
-    cameraSafeGapDp: Dp,
-    cameraTopInsetDp: Dp
+    cameraSafeGapDp: Dp
 ) {
     if (mode == IslandDisplayMode.COMPACT) {
         CompactSplitRow(
             cameraSafeGapDp = cameraSafeGapDp,
             leftContent = {
-                PopIcon(Icons.Rounded.BatteryStd, MutedWhite, "Unplugged", event.id, 18.dp)
+                PopIcon(Icons.Rounded.BatteryStd, MutedWhite, "Unplugged", event.id, 16.dp)
                 Spacer(Modifier.width(4.dp))
                 Text(
                     "Unplugged",
                     color = Color.White,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             },
             rightContent = {
-                Text("${event.batteryPercent}%", color = MutedWhite, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text("${event.batteryPercent}%", color = MutedWhite, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
         )
     } else {
         StandardExpandedCard(
-            cameraTopInsetDp = cameraTopInsetDp,
-            icon = { PopIcon(Icons.Rounded.BatteryStd, Color.White, "Battery", event.id, 30.dp) },
+            icon = { PopIcon(Icons.Rounded.BatteryStd, Color.White, "Battery", event.id, 26.dp) },
             title = "Charger Disconnected",
             subtitle = "Running on battery power",
             trailing = {
-                Text("${event.batteryPercent}%", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                Text("${event.batteryPercent}%", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             }
         )
     }
@@ -334,35 +330,33 @@ private fun ChargingStoppedCard(
 private fun BatteryFullCard(
     event: IslandEvent.BatteryFull,
     mode: IslandDisplayMode,
-    cameraSafeGapDp: Dp,
-    cameraTopInsetDp: Dp
+    cameraSafeGapDp: Dp
 ) {
     if (mode == IslandDisplayMode.COMPACT) {
         CompactSplitRow(
             cameraSafeGapDp = cameraSafeGapDp,
             leftContent = {
-                PopIcon(Icons.Rounded.CheckCircle, IslandGreen, "Battery Full", event.id, 18.dp)
+                PopIcon(Icons.Rounded.CheckCircle, IslandGreen, "Battery Full", event.id, 16.dp)
                 Spacer(Modifier.width(4.dp))
                 Text(
                     "Full",
                     color = Color.White,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1
                 )
             },
             rightContent = {
-                Text("100%", color = IslandGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("100%", color = IslandGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         )
     } else {
         StandardExpandedCard(
-            cameraTopInsetDp = cameraTopInsetDp,
-            icon = { PopIcon(Icons.Rounded.BatteryChargingFull, IslandGreen, "Battery Full", event.id, 32.dp) },
+            icon = { PopIcon(Icons.Rounded.BatteryChargingFull, IslandGreen, "Battery Full", event.id, 28.dp) },
             title = "Battery Full",
             subtitle = "100% charged · Safe to unplug",
             trailing = {
-                PopIcon(Icons.Rounded.CheckCircle, IslandGreen, "Done", event.id, 24.dp)
+                PopIcon(Icons.Rounded.CheckCircle, IslandGreen, "Done", event.id, 22.dp)
             }
         )
     }
@@ -372,41 +366,39 @@ private fun BatteryFullCard(
 private fun LowBatteryCard(
     event: IslandEvent.LowBattery,
     mode: IslandDisplayMode,
-    cameraSafeGapDp: Dp,
-    cameraTopInsetDp: Dp
+    cameraSafeGapDp: Dp
 ) {
     val accent = if (event.isCritical) IslandRed else IslandOrange
     if (mode == IslandDisplayMode.COMPACT) {
         CompactSplitRow(
             cameraSafeGapDp = cameraSafeGapDp,
             leftContent = {
-                PopIcon(Icons.Rounded.BatteryAlert, accent, "Low Battery", event.id, 18.dp)
+                PopIcon(Icons.Rounded.BatteryAlert, accent, "Low Battery", event.id, 16.dp)
                 Spacer(Modifier.width(4.dp))
                 Text(
                     text = if (event.isCritical) "Critical" else "Low",
                     color = accent,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1
                 )
             },
             rightContent = {
-                Text("${event.batteryPercent}%", color = accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text("${event.batteryPercent}%", color = accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         )
     } else {
         StandardExpandedCard(
-            cameraTopInsetDp = cameraTopInsetDp,
             icon = {
                 Box(contentAlignment = Alignment.Center) {
-                    BatteryRing(event.batteryPercent, accent, animatePulse = true, size = 40.dp)
-                    PopIcon(Icons.Rounded.BatteryAlert, accent, "Low Battery", event.id, 18.dp)
+                    BatteryRing(event.batteryPercent, accent, animatePulse = true, size = 36.dp)
+                    PopIcon(Icons.Rounded.BatteryAlert, accent, "Low Battery", event.id, 16.dp)
                 }
             },
             title = if (event.isCritical) "Critical Battery (${event.batteryPercent}%)" else "Low Battery (${event.batteryPercent}%)",
             subtitle = if (event.isCritical) "Connect charger immediately" else "Consider enabling Battery Saver",
             trailing = {
-                Text("${event.batteryPercent}%", color = accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("${event.batteryPercent}%", color = accent, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             }
         )
     }
@@ -416,14 +408,13 @@ private fun LowBatteryCard(
 private fun WifiConnectedCard(
     event: IslandEvent.WifiConnected,
     mode: IslandDisplayMode,
-    cameraSafeGapDp: Dp,
-    cameraTopInsetDp: Dp
+    cameraSafeGapDp: Dp
 ) {
     if (mode == IslandDisplayMode.COMPACT) {
         CompactSplitRow(
             cameraSafeGapDp = cameraSafeGapDp,
             leftContent = {
-                PopIcon(Icons.Rounded.Wifi, IslandBlue, "Wi-Fi", event.id, 18.dp)
+                PopIcon(Icons.Rounded.Wifi, IslandBlue, "Wi-Fi", event.id, 16.dp)
                 Spacer(Modifier.width(4.dp))
                 Text("Wi-Fi", color = IslandBlue, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
             },
@@ -431,7 +422,7 @@ private fun WifiConnectedCard(
                 Text(
                     text = event.ssid,
                     color = Color.White,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -440,17 +431,16 @@ private fun WifiConnectedCard(
         )
     } else {
         StandardExpandedCard(
-            cameraTopInsetDp = cameraTopInsetDp,
-            icon = { PopIcon(Icons.Rounded.Wifi, IslandBlue, "Wi-Fi Connected", event.id, 28.dp) },
+            icon = { PopIcon(Icons.Rounded.Wifi, IslandBlue, "Wi-Fi Connected", event.id, 26.dp) },
             title = event.ssid,
             subtitle = "Wi-Fi connected",
             trailing = {
                 Box(
                     modifier = Modifier
                         .background(IslandBlue.copy(alpha = 0.16f), RoundedCornerShape(10.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
-                    Text("Online", color = IslandBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Online", color = IslandBlue, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         )
@@ -460,16 +450,15 @@ private fun WifiConnectedCard(
 @Composable
 private fun WifiDisconnectedCard(
     mode: IslandDisplayMode,
-    cameraSafeGapDp: Dp,
-    cameraTopInsetDp: Dp
+    cameraSafeGapDp: Dp
 ) {
     if (mode == IslandDisplayMode.COMPACT) {
         CompactSplitRow(
             cameraSafeGapDp = cameraSafeGapDp,
             leftContent = {
-                PopIcon(Icons.Rounded.WifiOff, IslandRed, "Wi-Fi Off", "wifi_off", 18.dp)
+                PopIcon(Icons.Rounded.WifiOff, IslandRed, "Wi-Fi Off", "wifi_off", 16.dp)
                 Spacer(Modifier.width(4.dp))
-                Text("Wi-Fi", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                Text("Wi-Fi", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1)
             },
             rightContent = {
                 Text("Offline", color = IslandRed, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
@@ -477,8 +466,7 @@ private fun WifiDisconnectedCard(
         )
     } else {
         StandardExpandedCard(
-            cameraTopInsetDp = cameraTopInsetDp,
-            icon = { PopIcon(Icons.Rounded.WifiOff, IslandRed, "Wi-Fi Disconnected", "wifi_off", 28.dp) },
+            icon = { PopIcon(Icons.Rounded.WifiOff, IslandRed, "Wi-Fi Disconnected", "wifi_off", 26.dp) },
             title = "Wi-Fi Disconnected",
             subtitle = "No wireless network connection",
             trailing = {}
@@ -490,8 +478,7 @@ private fun WifiDisconnectedCard(
 private fun HotspotCard(
     event: IslandEvent.HotspotChanged,
     mode: IslandDisplayMode,
-    cameraSafeGapDp: Dp,
-    cameraTopInsetDp: Dp
+    cameraSafeGapDp: Dp
 ) {
     val accent = if (event.enabled) IslandGreen else MutedWhite
     val icon = if (event.enabled) Icons.Rounded.WifiTethering else Icons.Rounded.WifiTetheringOff
@@ -499,18 +486,17 @@ private fun HotspotCard(
         CompactSplitRow(
             cameraSafeGapDp = cameraSafeGapDp,
             leftContent = {
-                PopIcon(icon, accent, "Hotspot", event.id, 18.dp)
+                PopIcon(icon, accent, "Hotspot", event.id, 16.dp)
                 Spacer(Modifier.width(4.dp))
-                Text("Hotspot", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                Text("Hotspot", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1)
             },
             rightContent = {
-                Text(if (event.enabled) "Active" else "Off", color = accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(if (event.enabled) "Active" else "Off", color = accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
         )
     } else {
         StandardExpandedCard(
-            cameraTopInsetDp = cameraTopInsetDp,
-            icon = { PopIcon(icon, accent, "Hotspot", event.id, 28.dp) },
+            icon = { PopIcon(icon, accent, "Hotspot", event.id, 26.dp) },
             title = if (event.enabled) "Personal Hotspot On" else "Personal Hotspot Off",
             subtitle = if (event.enabled) "Sharing mobile connection" else "Tethering disabled",
             trailing = {}
@@ -522,8 +508,7 @@ private fun HotspotCard(
 private fun BluetoothCard(
     event: IslandEvent.BluetoothChanged,
     mode: IslandDisplayMode,
-    cameraSafeGapDp: Dp,
-    cameraTopInsetDp: Dp
+    cameraSafeGapDp: Dp
 ) {
     val icon = when {
         !event.connected -> Icons.Rounded.BluetoothDisabled
@@ -536,7 +521,7 @@ private fun BluetoothCard(
         CompactSplitRow(
             cameraSafeGapDp = cameraSafeGapDp,
             leftContent = {
-                PopIcon(icon, accent, "Bluetooth", event.id, 18.dp)
+                PopIcon(icon, accent, "Bluetooth", event.id, 16.dp)
                 Spacer(Modifier.width(4.dp))
                 Text(
                     text = if (event.connected) "Audio" else "Off",
@@ -550,7 +535,7 @@ private fun BluetoothCard(
                 Text(
                     text = event.deviceName,
                     color = Color.White,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -559,8 +544,7 @@ private fun BluetoothCard(
         )
     } else {
         StandardExpandedCard(
-            cameraTopInsetDp = cameraTopInsetDp,
-            icon = { PopIcon(icon, accent, "Bluetooth", event.id, 28.dp) },
+            icon = { PopIcon(icon, accent, "Bluetooth", event.id, 26.dp) },
             title = event.deviceName,
             subtitle = if (event.connected) {
                 if (event.isAudioDevice) "Audio device connected" else "Bluetooth connected"
@@ -569,7 +553,7 @@ private fun BluetoothCard(
             },
             trailing = {
                 event.batteryLevel?.let { lvl ->
-                    Text("$lvl%", color = accent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text("$lvl%", color = accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         )
@@ -580,8 +564,7 @@ private fun BluetoothCard(
 private fun AirplaneModeCard(
     event: IslandEvent.AirplaneModeChanged,
     mode: IslandDisplayMode,
-    cameraSafeGapDp: Dp,
-    cameraTopInsetDp: Dp
+    cameraSafeGapDp: Dp
 ) {
     val accent = if (event.enabled) IslandOrange else IslandGreen
     val icon = if (event.enabled) Icons.Rounded.AirplanemodeActive else Icons.Rounded.AirplanemodeInactive
@@ -589,18 +572,17 @@ private fun AirplaneModeCard(
         CompactSplitRow(
             cameraSafeGapDp = cameraSafeGapDp,
             leftContent = {
-                PopIcon(icon, accent, "Airplane Mode", event.id, 18.dp)
+                PopIcon(icon, accent, "Airplane Mode", event.id, 16.dp)
                 Spacer(Modifier.width(4.dp))
-                Text("Airplane", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                Text("Airplane", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1)
             },
             rightContent = {
-                Text(if (event.enabled) "On" else "Off", color = accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(if (event.enabled) "On" else "Off", color = accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
         )
     } else {
         StandardExpandedCard(
-            cameraTopInsetDp = cameraTopInsetDp,
-            icon = { PopIcon(icon, accent, "Airplane Mode", event.id, 28.dp) },
+            icon = { PopIcon(icon, accent, "Airplane Mode", event.id, 26.dp) },
             title = if (event.enabled) "Airplane Mode On" else "Airplane Mode Off",
             subtitle = if (event.enabled) "Wireless radios suspended" else "Cellular & Wi-Fi restored",
             trailing = {}
@@ -612,8 +594,7 @@ private fun AirplaneModeCard(
 private fun RingerModeCard(
     event: IslandEvent.RingerModeChanged,
     mode: IslandDisplayMode,
-    cameraSafeGapDp: Dp,
-    cameraTopInsetDp: Dp
+    cameraSafeGapDp: Dp
 ) {
     val (label, icon, accent) = when (event.mode) {
         RingerMode.SILENT -> Triple("Silent", Icons.Rounded.NotificationsOff, IslandRed)
@@ -624,18 +605,17 @@ private fun RingerModeCard(
         CompactSplitRow(
             cameraSafeGapDp = cameraSafeGapDp,
             leftContent = {
-                PopIcon(icon, accent, label, event.id, 18.dp)
+                PopIcon(icon, accent, label, event.id, 16.dp)
                 Spacer(Modifier.width(4.dp))
-                Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                Text(label, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1)
             },
             rightContent = {
-                Text("Mode", color = MutedWhite, fontSize = 11.sp, maxLines = 1)
+                Text("Mode", color = MutedWhite, fontSize = 10.sp, maxLines = 1)
             }
         )
     } else {
         StandardExpandedCard(
-            cameraTopInsetDp = cameraTopInsetDp,
-            icon = { PopIcon(icon, accent, label, event.id, 28.dp) },
+            icon = { PopIcon(icon, accent, label, event.id, 26.dp) },
             title = "$label Mode",
             subtitle = when (event.mode) {
                 RingerMode.SILENT -> "Calls and alerts muted"
@@ -652,14 +632,13 @@ private fun IncomingCallCard(
     event: IslandEvent.IncomingCall,
     mode: IslandDisplayMode,
     cameraSafeGapDp: Dp,
-    cameraTopInsetDp: Dp,
     onCallCommand: (CallCommand) -> Unit
 ) {
     if (mode == IslandDisplayMode.COMPACT) {
         CompactSplitRow(
             cameraSafeGapDp = cameraSafeGapDp,
             leftContent = {
-                PopIcon(Icons.Rounded.Call, IslandGreen, "Incoming Call", event.id, 18.dp)
+                PopIcon(Icons.Rounded.Call, IslandGreen, "Incoming Call", event.id, 16.dp)
                 Spacer(Modifier.width(4.dp))
                 Text("Call", color = IslandGreen, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
             },
@@ -667,7 +646,7 @@ private fun IncomingCallCard(
                 Text(
                     text = event.callerName,
                     color = Color.White,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -675,11 +654,10 @@ private fun IncomingCallCard(
             }
         )
     } else {
-        val topPad = maxOf(14.dp, cameraTopInsetDp)
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 18.dp, end = 18.dp, top = topPad, bottom = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -687,14 +665,14 @@ private fun IncomingCallCard(
                 Text(
                     text = "Incoming Call",
                     color = IslandGreen,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = event.callerName,
                     color = Color.White,
-                    fontSize = 18.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -703,29 +681,29 @@ private fun IncomingCallCard(
                     Text(
                         text = event.phoneNumber,
                         color = MutedWhite,
-                        fontSize = 13.sp
+                        fontSize = 12.sp
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Surface(
                     onClick = { onCallCommand(CallCommand.Decline) },
                     shape = CircleShape,
                     color = IslandRed,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(44.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.CallEnd, "Decline", tint = Color.White, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Rounded.CallEnd, "Decline", tint = Color.White, modifier = Modifier.size(20.dp))
                     }
                 }
                 Surface(
                     onClick = { onCallCommand(CallCommand.Accept) },
                     shape = CircleShape,
                     color = IslandGreen,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(44.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.Call, "Accept", tint = Color.White, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Rounded.Call, "Accept", tint = Color.White, modifier = Modifier.size(20.dp))
                     }
                 }
             }
@@ -738,7 +716,6 @@ private fun MusicPlayerCard(
     event: IslandEvent.MusicPlayback,
     mode: IslandDisplayMode,
     cameraSafeGapDp: Dp,
-    cameraTopInsetDp: Dp,
     onCollapse: () -> Unit,
     onMediaCommand: (MediaCommand) -> Unit
 ) {
@@ -747,13 +724,13 @@ private fun MusicPlayerCard(
         CompactSplitRow(
             cameraSafeGapDp = cameraSafeGapDp,
             leftContent = {
-                AlbumArtBox(event = event, size = 24.dp, corner = 7.dp)
+                AlbumArtBox(event = event, size = 22.dp, corner = 6.dp)
                 if (cameraSafeGapDp == 0.dp) {
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = event.title.ifBlank { "Now Playing" },
                         color = Color.White,
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -765,11 +742,10 @@ private fun MusicPlayerCard(
             }
         )
     } else {
-        val topPad = maxOf(16.dp, cameraTopInsetDp)
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 18.dp, end = 18.dp, top = topPad, bottom = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
@@ -778,24 +754,23 @@ private fun MusicPlayerCard(
             ) {
                 AlbumArtBox(
                     event = event,
-                    size = if (mode == IslandDisplayMode.FULL_EXPANDED) 54.dp else 46.dp,
-                    corner = 12.dp
+                    size = if (mode == IslandDisplayMode.FULL_EXPANDED) 46.dp else 40.dp,
+                    corner = 10.dp
                 )
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = event.title.ifBlank { "Unknown Track" },
                         color = Color.White,
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(Modifier.height(2.dp))
                     Text(
                         text = event.artist.ifBlank { "Unknown Artist" },
                         color = MutedWhite,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -807,14 +782,14 @@ private fun MusicPlayerCard(
                     onClick = onCollapse,
                     shape = CircleShape,
                     color = Color(0x1AFFFFFF),
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier.size(28.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Rounded.KeyboardArrowUp,
                             contentDescription = "Collapse",
                             tint = MutedWhite,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
@@ -833,36 +808,36 @@ private fun MusicPlayerCard(
                 Surface(
                     onClick = { onMediaCommand(MediaCommand.Previous) },
                     shape = CircleShape,
-                    color = Color(0x16FFFFFF),
-                    modifier = Modifier.size(48.dp)
+                    color = Color(0x18FFFFFF),
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(28.dp))
+                        Icon(Icons.Rounded.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(22.dp))
                     }
                 }
                 Surface(
                     onClick = { onMediaCommand(MediaCommand.PlayPause) },
                     shape = CircleShape,
-                    color = Color(0x30FFFFFF),
-                    modifier = Modifier.size(54.dp)
+                    color = Color(0x32FFFFFF),
+                    modifier = Modifier.size(46.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = if (event.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                             contentDescription = if (event.isPlaying) "Pause" else "Play",
                             tint = Color.White,
-                            modifier = Modifier.size(30.dp)
+                            modifier = Modifier.size(26.dp)
                         )
                     }
                 }
                 Surface(
                     onClick = { onMediaCommand(MediaCommand.Next) },
                     shape = CircleShape,
-                    color = Color(0x16FFFFFF),
-                    modifier = Modifier.size(48.dp)
+                    color = Color(0x18FFFFFF),
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.SkipNext, "Next", tint = Color.White, modifier = Modifier.size(28.dp))
+                        Icon(Icons.Rounded.SkipNext, "Next", tint = Color.White, modifier = Modifier.size(22.dp))
                     }
                 }
             }
@@ -985,6 +960,8 @@ private fun MusicSeekBar(
     onScrub: (Float) -> Unit,
     onScrubFinished: (Float) -> Unit
 ) {
+    val currentOnScrub by rememberUpdatedState(onScrub)
+    val currentOnScrubFinished by rememberUpdatedState(onScrubFinished)
     var lastFraction by remember { mutableFloatStateOf(progress) }
     if (!isScrubbing) {
         lastFraction = progress
@@ -993,13 +970,13 @@ private fun MusicSeekBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(26.dp)
+            .height(24.dp)
             .pointerInput(Unit) {
                 detectTapGestures { offset ->
                     val width = size.width.toFloat().coerceAtLeast(1f)
                     val fraction = (offset.x / width).coerceIn(0f, 1f)
                     lastFraction = fraction
-                    onScrubFinished(fraction)
+                    currentOnScrubFinished(fraction)
                 }
             }
             .pointerInput(Unit) {
@@ -1008,20 +985,20 @@ private fun MusicSeekBar(
                         val width = size.width.toFloat().coerceAtLeast(1f)
                         val fraction = (offset.x / width).coerceIn(0f, 1f)
                         lastFraction = fraction
-                        onScrub(fraction)
+                        currentOnScrub(fraction)
                     },
                     onHorizontalDrag = { change, _ ->
                         change.consume()
                         val width = size.width.toFloat().coerceAtLeast(1f)
                         val fraction = (change.position.x / width).coerceIn(0f, 1f)
                         lastFraction = fraction
-                        onScrub(fraction)
+                        currentOnScrub(fraction)
                     },
                     onDragEnd = {
-                        onScrubFinished(lastFraction)
+                        currentOnScrubFinished(lastFraction)
                     },
                     onDragCancel = {
-                        onScrubFinished(lastFraction)
+                        currentOnScrubFinished(lastFraction)
                     }
                 )
             },
@@ -1167,28 +1144,26 @@ private fun AnimatedEqualizer(isPlaying: Boolean, color: Color) {
 
 @Composable
 private fun StandardExpandedCard(
-    cameraTopInsetDp: Dp,
     icon: @Composable () -> Unit,
     title: String,
     subtitle: String,
     trailing: @Composable () -> Unit
 ) {
-    val topPad = maxOf(14.dp, cameraTopInsetDp)
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .padding(start = 18.dp, end = 18.dp, top = topPad, bottom = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
             icon()
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(12.dp))
             Column {
                 Text(
                     text = title,
                     color = Color.White,
-                    fontSize = 15.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis

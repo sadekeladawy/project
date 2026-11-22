@@ -93,23 +93,45 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({
           )}
         </AnimatePresence>
 
-        {/* Android Status Bar (hidden when fullscreen, dims cleanly when Island widens) */}
+        {/* Android Status Bar & Front Camera Punch-Hole (always crisp & unobstructed) */}
         {!state.isFullscreen && (
           <div
-            className={`relative z-10 flex items-center justify-between px-6 pt-3.5 text-[12px] font-medium text-white/90 tabular-nums pointer-events-none transition-opacity duration-200 ${
-              state.activeEvent && state.displayMode !== 'IDLE' ? 'opacity-25' : 'opacity-100'
-            }`}
+            data-testid="phone-status-bar"
+            className="relative z-20 flex items-center justify-between px-5 pt-3.5 text-[12px] font-medium text-white/95 tabular-nums pointer-events-none"
           >
-            <span>11:18</span>
-            <div className="flex items-center gap-1.5 text-[11px] text-white/85">
+            <div className="flex items-center gap-1.5">
+              <span>11:18</span>
+              <span
+                aria-hidden="true"
+                className="w-1.5 h-1.5 rounded-full bg-[#38BDF8]"
+                title="Status notification"
+              />
+              <span
+                aria-hidden="true"
+                className="w-1.5 h-1.5 rounded-full bg-[#34D399]"
+                title="Status notification"
+              />
+            </div>
+            {/* Physical Front Camera Punch-Hole */}
+            <div
+              data-testid="camera-punch-hole"
+              aria-hidden="true"
+              className="absolute left-1/2 -translate-x-1/2 top-[13px] w-4 h-4 rounded-full bg-[#050608] border border-white/15 shadow-inner flex items-center justify-center"
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-[#1E293B]" />
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px] text-white/90">
               <span>5G</span>
               <span>84%</span>
             </div>
           </div>
         )}
 
-        {/* Floating Dynamic Island Window */}
-        <div className="absolute top-0 left-0 right-0 z-30 flex justify-center pointer-events-none">
+        {/* Floating Dynamic Island Window — strictly topmost overlay (z-50) */}
+        <div
+          data-testid="dynamic-island-layer"
+          className="absolute top-0 left-0 right-0 z-50 flex justify-center pointer-events-none"
+        >
           <DynamicIslandCapsule
             activeEvent={state.activeEvent}
             displayMode={state.displayMode}
@@ -319,7 +341,7 @@ function AppTransitionOverlayLayer({
         transformOrigin: '50% 0%',
         background: `linear-gradient(180deg, ${transition.dominantColor} 0%, #11131F 100%)`,
       }}
-      className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 pointer-events-none"
+      className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 pointer-events-none"
     >
       <img
         src="/src/assets/images/album_cover_midnight_1795029689726.jpg"
